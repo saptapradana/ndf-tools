@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU Partition Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        table {
+            width: 80%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .gpu-input {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>GPU Partition Calculator</h1>
+    <form id="gpu-form">
+        <div id="gpu-inputs"></div>
+        <button type="button" id="add-gpu">Tambah GPU</button>
+        <button type="submit">Hitung</button>
+    </form>
+
+    <button type="button" id="print-gpuData">cek</button>
+
+    <h2>Estimasi Partisi GPU</h2>
+    <table id="estimation-table">
+        <thead>
+            <tr>
+                <th>VRAM (MB)</th>
+                <th>Estimation</th>
+            </tr>
+        </thead>
+        <tbody id="estimation-body">
+            <!-- Hasil partisi akan ditampilkan di sini -->
+        </tbody>
+    </table>
+
+    <h2>Hasil Pembagian Partisi:</h2>
+    <table id="result-table">
+        <thead>
+            <tr>
+                <th>GPU ID</th>
+                <th>VRAM (MB)</th>
+                <th>Partition Start</th>
+                <th>Partition End</th>
+            </tr>
+        </thead>
+        <tbody id="result-body">
+            <!-- Hasil partisi akan ditampilkan di sini -->
+        </tbody>
+    </table>
+
+    <script>
+        let gpuData = {};
+
+        document.getElementById('print-gpuData').addEventListener('click', function () {
+            let estimatedBody = document.getElementById('estimation-body');
+            estimatedBody.innerHTML = '';
+
+            for (let id in gpuData) {
+                if (gpuData.hasOwnProperty(id)) {
+                    let gpu = gpuData[id];
+                    let row = `
+                    <tr>
+                        <td>${gpu.vram}</td>
+                        <td>${gpu.estimated}</td>
+                    </tr>`;
+                    estimatedBody.innerHTML += row;
+                }
+            }
+        });
+
+        document.getElementById('add-gpu').addEventListener('click', function () {
+            let gpuCount = document.querySelectorAll('.gpu-input').length + 1;
+            let gpuDiv = document.createElement('div');
+            let randomIdChar = Math.random().toString(36).substring(7);
+            gpuDiv.className = 'gpu-input';
+            gpuDiv.id = randomIdChar;
+            gpuDiv.innerHTML = `
+        <label for="vram${gpuCount}">VRAM GPU ${gpuCount} (MB):</label>
+        <input type="number" id="vram${gpuCount}" name="vram${gpuCount}" required oninput="updateGpuData('${randomIdChar}', 'vram', this.value)">
+        <label for="count${gpuCount}">Jumlah GPU ${gpuCount}:</label>
+        <input type="number" id="count${gpuCount}" name="count${gpuCount}" value="1" min="1" required oninput="updateGpuData('${randomIdChar}', 'count', this.value)">
+        <button type="button" onclick="deleteMem('${randomIdChar}')">Delete GPU ${gpuCount}</button>
+    `;
+            document.getElementById('gpu-inputs').appendChild(gpuDiv);
+
+            gpuData[randomIdChar] = { id: randomIdChar, vram: 0, count: 1, estimated: 0 };
+        });
+
+        function updateGpuData(id, type, value) {
+            gpuData[id][type] = Number(value);
+        }
+
+        function deleteMem(id) {
+            let gpuDiv = document.getElementById(id);
+            document.getElementById('gpu-inputs').removeChild(gpuDiv);
+            delete gpuData[id];
+        }
+
+        // Fungsi untuk menghitung dan menampilkan hasil
+        document.getElementById('gpu-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            totalVram = 0;
+            for (let id in gpuData) {
+                if (gpuData.hasOwnProperty(id)) {
+                    totalVram += gpuData[id].vram * gpuData[id].count;
+                }
+            }
+
+            gpuDataBuffer = {};
+
+            for (let id in gpuData) {
+                if (gpuData.hasOwnProperty(id)) {
+                    let vram = gpuData[id].vram;
+                    let estimation = (vram / totalVram) * 255;
+                    estimation = Math.floor(estimation);
+                    gpuData[id].estimated = estimation;
+                }
+            }
+
+            // let gpuInputs = document.querySelectorAll('.gpu-input');
+            // gpuInputs.forEach(function (gpuInput) {
+            //     let vram = gpuInput.querySelector('input[name^="vram"]').value;
+            //     let count = gpuInput.querySelector('input[name^="count"]').value;
+            //     gpuData.push({ vram: Number(vram), count: Number(count) });
+            // });
+
+            let resultBody = document.getElementById('result-body');
+            resultBody.innerHTML = '';
+
+            let partitionBuffer = 0;
+
+            let index = 0;
+            for (let id in gpuData) {
+                index++;
+                if (gpuData.hasOwnProperty(id)) {
+                    const gpu = gpuData[id];
+                    for (let i = 0; i < gpu.count; i++) {
+                        let start = (i== 0 ? partitionBuffer : partitionBuffer + 1);
+                        let end = start + (i == 0 ? gpu.estimated : gpu.estimated - 1);
+                        let row = `
+            <tr>
+                <td>gpu-${index}-${i+1}</td>
+                <td>${gpu.vram}</td>
+                <td class="partition-start">${start}</td>
+                <td class="partition-end">${end}</td>
+            </tr>`;
+                        resultBody.innerHTML += row;
+
+                        partitionBuffer = end;
+                    }
+                }
+            }
+
+            if (partitionBuffer < 255) {
+                let row = `
+            <tr>
+                <td>sisa</td>
+                <td>-</td>
+                <td class="partition-start">-</td>
+                <td class="partition-end">${255 - partitionBuffer}</td>
+            </tr>`;
+                resultBody.innerHTML += row;
+            }
+        });
+
+    </script>
+
+</body>
+
+</html>
